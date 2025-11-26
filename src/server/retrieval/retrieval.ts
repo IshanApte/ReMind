@@ -1,5 +1,6 @@
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
+import { calculateActivation } from './decay';
 
 // --- 1. TYPES ---
 
@@ -20,9 +21,11 @@ export interface ScoredChunk extends MemoryChunk {
 }
 
 export interface RetrievalOptions {
-  alpha: number;           // Weight for Semantic Similarity (e.g., 0.8)
-  decayFactor: number;     // How fast memory decays (Lambda). Higher = Faster forget.
-  currentTurn: number;     // Current global turn counter
+  alpha: number;           // Weight for Semantic Similarity (e.g., 0.6 in the full score)
+  beta?: number;           // Weight for time-decay score t_i (e.g., 0.25). If omitted/0 => pure similarity.
+  halfLife?: number;       // H: half-life in turns (how many turns until decay halves).
+  lambdaFloor?: number;    // λ: minimum decay score floor (e.g., 0.1). Optional.
+  currentTurn: number;     // Current global turn counter (in turns, not wall-clock time)
 }
 
 // --- 2. STATE & LOADING ---
@@ -33,18 +36,27 @@ let globalMemoryBank: MemoryChunk[] | null = null;
 // Simulating a session database for "Last Accessed" state
 const accessHistory = new Map<number | string, number>();
 
+// Testing helpers (no-op in production usage, but allow us to inject state in Jest)
+export const __setMemoryBankForTesting = (bank: MemoryChunk[] | null) => {
+  globalMemoryBank = bank;
+};
+
+export const __resetAccessHistoryForTesting = () => {
+  accessHistory.clear();
+};
+
 export const loadMemoryBank = (): MemoryChunk[] => {
   if (globalMemoryBank) return globalMemoryBank;
 
   try {
-    // ⚠️ FIXED PATH: Pointing to 'data/chunks_with_embeddings.json' based on setup
-    const filePath = path.join(process.cwd(),'chunks_embeddings.json');
+    // ⚠️ FIXED PATH: Pointing to 'data/chunks_embeddings.json' where the precomputed chunks live
+    const filePath = path.join(process.cwd(), 'data', 'chunks_embeddings.json');
     const fileContents = fs.readFileSync(filePath, 'utf-8');
     globalMemoryBank = JSON.parse(fileContents) as MemoryChunk[];
     console.log(`🧠 [System] Memory Bank Loaded: ${globalMemoryBank.length} chunks.`);
     return globalMemoryBank;
   } catch (error) {
-    console.error("❌ Failed to load memory bank. Check data/chunks_with_embeddings.json", error);
+    console.error("❌ Failed to load memory bank. Check data/chunks_embeddings.json", error);
     return [];
   }
 };
@@ -68,10 +80,6 @@ const cosineSimilarity = (vecA: number[], vecB: number[]): number => {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 };
 
-const calculateActivation = (age: number, decayLambda: number): number => {
-  return Math.pow(1 + age, -decayLambda);
-};
-
 // --- 4. CORE RETRIEVAL FUNCTION ---
 
 export const retrieve = (
@@ -79,26 +87,39 @@ export const retrieve = (
   options: RetrievalOptions
 ): ScoredChunk[] => {
   const memoryBank = loadMemoryBank();
+  const {
+    alpha,
+    beta = 0,            // default: no decay contribution
+    halfLife,
+    lambdaFloor,
+    currentTurn
+  } = options;
   
   const scoredChunks = memoryBank.map((chunk) => {
     const similarity = cosineSimilarity(queryVector, chunk.embedding);
-    
-    // --- 🚫 DECAY LOGIC TEMPORARILY DISABLED ---
-    /*
-    // Default to "50 turns old" if never seen, so it doesn't decay to zero immediately but isn't fresh
-    const lastSeen = accessHistory.get(chunk.id) || 0;
-    const age = accessHistory.has(chunk.id) 
-      ? Math.max(0, options.currentTurn - lastSeen) 
-      : 50; 
-    
-    const recencyScore = calculateActivation(age, options.decayFactor);
-    const finalScore = (options.alpha * similarity) + ((1 - options.alpha) * recencyScore);
-    */
 
-    // 🟢 PURE SIMILARITY MODE
-    const recencyScore = 1.0; // Dummy value
-    const finalScore = similarity; // Pure vector match (100% Semantic)
-    const lastSeen = 0;
+    // --- Time-based decay score t_i ---
+    // If beta is 0 or halfLife is not provided, we effectively run in pure similarity mode.
+    let recencyScore = 1.0;
+    let lastSeen = currentTurn;
+
+    if (beta > 0 && typeof halfLife === 'number') {
+      const storedLastSeen = accessHistory.get(chunk.id);
+
+      if (typeof storedLastSeen === 'number') {
+        lastSeen = storedLastSeen;
+      } else {
+        // Unseen chunks start as if they were just accessed now.
+        lastSeen = currentTurn;
+      }
+
+      const age = Math.max(0, currentTurn - lastSeen);
+      recencyScore = calculateActivation(age, halfLife, lambdaFloor);
+    }
+
+    // --- Final blended score s_i = alpha * r_i + beta * t_i ---
+    // If beta is 0, this simplifies to pure similarity.
+    const finalScore = alpha * similarity + beta * recencyScore;
 
     return {
       ...chunk,
@@ -116,6 +137,21 @@ export const retrieve = (
 };
 
 export const reinforceMemory = (chunkId: number | string, currentTurn: number) => {
+  /**
+   * Retrieval reinforcement:
+   * Call this whenever a chunk is actually used in an answer so that
+   * future decay scores treat it as freshly accessed at `currentTurn`.
+   */
   accessHistory.set(chunkId, currentTurn);
   console.log(`🔄 Reinforced Memory #${chunkId} at Turn ${currentTurn}`);
+};
+
+/**
+ * Convenience helper to reinforce multiple chunks at the same turn.
+ */
+export const reinforceMany = (chunkIds: Array<number | string>, currentTurn: number) => {
+  chunkIds.forEach((id) => accessHistory.set(id, currentTurn));
+  if (chunkIds.length > 0) {
+    console.log(`🔄 Reinforced ${chunkIds.length} memories at Turn ${currentTurn}`);
+  }
 };

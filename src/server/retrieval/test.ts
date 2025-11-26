@@ -1,5 +1,5 @@
 import { pipeline } from '@xenova/transformers';
-import { retrieve, loadMemoryBank } from './retrieval';
+import { retrieve, loadMemoryBank, reinforceMany } from './retrieval';
 
 // Global extractor to prevent reloading the model on every request
 let extractor: any = null;
@@ -19,7 +19,7 @@ async function getEmbedding(text: string): Promise<number[]> {
   return Array.from(output.data);
 }
 
-async function runLiveTest(userQuery: string) {
+async function runLiveTest() {
   console.log(`\n🔵 System Initializing...`);
   
   // Ensure data is loaded
@@ -29,34 +29,58 @@ async function runLiveTest(userQuery: string) {
     return;
   }
 
-  console.log(`\n🗣️  User asks: "${userQuery}"`);
-  console.log(`... Generating vector for query ...`);
+  const questions = [
+    "What is the heart's main function?",
+    "Describe the structure of the heart.",
+    "How does blood flow through the heart chambers?",
+    "What do the valves in the heart do?",
+  ];
 
-  try {
-    // A. CONVERT TEXT TO VECTOR
-    const queryVector = await getEmbedding(userQuery);
+  let currentTurn = 1;
 
-    // B. PERFORM RETRIEVAL
-    const results = retrieve(queryVector, {
-      alpha: 0.8,       // 80% Semantic match
-      decayFactor: 0.5, 
-      currentTurn: 1
-    });
+  for (const userQuery of questions) {
+    console.log(`\n@zsh (turn ${currentTurn})`);
+    console.log(`🗣️  User: "${userQuery}"`);
+    console.log(`... Generating vector for query ...`);
 
-    // C. DISPLAY RESULTS
-    console.log(`\n🏆 Top 3 Memories for "${userQuery}":`);
-    results.slice(0, 3).forEach((r, i) => {
-      console.log(`\n   #${i + 1} [Score: ${r.finalScore.toFixed(4)}]`);
-      console.log(`   📂 Heading: ${r.heading || 'N/A'}`);
-      console.log(`   📄 Text: "${r.text.substring(0, 100)}..."`);
-    });
+    try {
+      // A. CONVERT TEXT TO VECTOR
+      const queryVector = await getEmbedding(userQuery);
 
-  } catch (err) {
-    console.error("❌ Error generating embedding:", err);
+      // B. PERFORM RETRIEVAL
+      const results = retrieve(queryVector, {
+        alpha: 0.6,        // 60% Semantic similarity
+        beta: 0.4,         // 40% time-based decay score t_i
+        halfLife: 10,      // H: 10 turns until decay halves
+        lambdaFloor: 0.1,  // λ: floor so old but relevant chunks never fully vanish
+        currentTurn,
+      });
+
+      // C. DISPLAY RESULTS
+      console.log(`\n🏆 Top 10 Memories for turn ${currentTurn}:`);
+      const topResults = results.slice(0, 10);
+      topResults.forEach((r, i) => {
+        console.log(
+          `\n   #${i + 1} [Final: ${r.finalScore.toFixed(4)} | sim: ${r.similarity.toFixed(
+            4
+          )} | decay: ${r.recencyScore.toFixed(4)}]`
+        );
+        console.log(`   📂 Heading: ${r.heading || 'N/A'}`);
+        console.log(`   📄 Text: "${r.text.substring(0, 100)}..."`);
+      });
+
+      // Simulate retrieval reinforcement: mark top results as recently accessed this turn.
+      reinforceMany(
+        topResults.map((r) => r.id),
+        currentTurn
+      );
+    } catch (err) {
+      console.error("❌ Error generating embedding:", err);
+    }
+
+    currentTurn += 1;
   }
 }
 
-// --- RUN THE TEST ---
-// You can change this string to test different biology topics!
-const sampleQuery = "How does the heart pump blood to the body?";
-runLiveTest(sampleQuery);
+// --- RUN THE MULTI-TURN TEST ---
+runLiveTest();
