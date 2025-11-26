@@ -1,0 +1,68 @@
+# --- Dependencies ---
+node_modules/
+.pnp
+.pnp.js
+venv/
+env/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.python-version
+# --- Next.js ---
+.next/
+out/
+build/
+dist/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+.testmondata
+MANIFEST
+
+# --- Data & Large Files ---
+# Ignore the massive JSON files to avoid bloating Git
+data/chunks_with_embeddings.json
+data/memory_seed.json
+*.sqlite
+*.db
+
+# --- Testing & Logs ---
+coverage/
+.nyc_output/
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# --- IDEs & OS ---
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+
+# --- TypeScript ---
+*.tsbuildinfo
+next-env.d.ts
