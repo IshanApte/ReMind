@@ -11,6 +11,8 @@ export interface MemoryChunk {
   heading?: string;
   chapter?: string;
   section?: string;
+  start_line?: number;
+  end_line?: number;
 }
 
 export interface ScoredChunk extends MemoryChunk {

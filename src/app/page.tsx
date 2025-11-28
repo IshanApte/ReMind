@@ -1,6 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import BookHeatmap from './components/BookHeatmap';
+
+interface ChunkMetadata {
+  id: number;
+  start_line: number;
+  end_line: number;
+}
 
 interface Source {
   id: number | string;
@@ -11,6 +18,8 @@ interface Source {
   similarity: number;
   finalScore: number;
   recencyScore: number;
+  start_line?: number;
+  end_line?: number;
 }
 
 interface Message {
@@ -25,6 +34,25 @@ export default function Home() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedMessageIndex, setSelectedMessageIndex] = useState<number | null>(null);
+  const [chunksMetadata, setChunksMetadata] = useState<ChunkMetadata[]>([]);
+  const [totalLines, setTotalLines] = useState<number>(0);
+  
+  // Load chunk metadata on mount
+  useEffect(() => {
+    const loadMetadata = async () => {
+      try {
+        const response = await fetch('/api/chunks/metadata');
+        if (response.ok) {
+          const data = await response.json();
+          setChunksMetadata(data.chunks || []);
+          setTotalLines(data.totalLines || 0);
+        }
+      } catch (error) {
+        console.error('Failed to load chunks metadata:', error);
+      }
+    };
+    loadMetadata();
+  }, []);
   
   // Check if button should be enabled
   const isButtonDisabled = loading || !input.trim();
@@ -33,6 +61,20 @@ export default function Home() {
   const selectedSources = selectedMessageIndex !== null 
     ? messages[selectedMessageIndex]?.sources 
     : null;
+  
+  // Get all accessed chunk IDs with their access counts from all messages
+  const accessedChunkIds = useMemo(() => {
+    const chunkMap = new Map<number | string, number>();
+    messages.forEach(msg => {
+      if (msg.sources) {
+        msg.sources.forEach(source => {
+          const currentCount = chunkMap.get(source.id) || 0;
+          chunkMap.set(source.id, currentCount + 1);
+        });
+      }
+    });
+    return chunkMap;
+  }, [messages]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,6 +147,17 @@ export default function Home() {
             AI with human-like memory dynamics
           </p>
         </header>
+
+        {/* Book Heatmap */}
+        {chunksMetadata.length > 0 && totalLines > 0 && (
+          <div className="mb-6">
+            <BookHeatmap
+              chunksMetadata={chunksMetadata}
+              accessedChunkIds={accessedChunkIds}
+              totalLines={totalLines}
+            />
+          </div>
+        )}
 
         {/* Two Column Layout */}
         <div className="flex gap-4 h-[600px]">
