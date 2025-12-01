@@ -14,13 +14,45 @@ async function getEmbedding(text: string): Promise<number[]> {
 }
 
 /**
- * Calculates a "Trust Score" (0-100) without making extra API calls.
- * It combines:
- * 1. Keyword Overlap (Did the AI mention the specific nouns you asked about?)
- * 2. Context Quality (Did our retrieval engine find good data?)
+ * Calculates cosine similarity between two vectors
  */
-function calculateLocalConfidence(query: string, answer: string, topChunkScore: number): number {
-  // A. Keyword Check: Did the answer actually use the words from the question?
+function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+/**
+ * Calculates a "Trust Score" (0-100) that inversely correlates with hallucination.
+ * It combines:
+ * 1. Groundedness (How well does the answer match the source context?) - ANTI-HALLUCINATION
+ * 2. Keyword Overlap (Did the AI mention the specific nouns you asked about?)
+ * 3. Context Quality (Did our retrieval engine find good data?)
+ */
+async function calculateLocalConfidence(
+  query: string, 
+  answer: string, 
+  topChunkScore: number,
+  sourceContext: string
+): Promise<number> {
+  // A. GROUNDEDNESS CHECK (Anti-Hallucination Metric)
+  // This is the KEY metric for detecting hallucination.
+  // We embed both the answer and the source context, then measure semantic similarity.
+  // High similarity = answer is well-grounded in sources = low hallucination
+  const answerEmbedding = await getEmbedding(answer);
+  const contextEmbedding = await getEmbedding(sourceContext);
+  const groundednessScore = cosineSimilarity(answerEmbedding, contextEmbedding);
+  // Normalize from typical range [-1, 1] to [0, 1] (cosine similarity can be negative)
+  const normalizedGroundedness = Math.max(0, (groundednessScore + 1) / 2);
+
+  // B. Keyword Check: Did the answer actually use the words from the question?
   // We filter out common stop words to find the "meat" of the question.
   const stopWords = new Set(['the', 'is', 'at', 'which', 'on', 'a', 'an', 'and', 'or', 'but', 'how', 'what', 'why', 'who', 'does', 'do', 'can', 'explain', 'describe']);
   
@@ -41,16 +73,17 @@ function calculateLocalConfidence(query: string, answer: string, topChunkScore: 
   // Default to 0.8 if no keywords found (e.g., "Hello") to give benefit of doubt.
   const keywordScore = queryKeywords.length > 0 ? (hitCount / queryKeywords.length) : 0.8;
 
-  // B. Context Score Normalization
+  // C. Context Score Normalization
   // Our cosine scores usually float between 0.3 (bad) and 0.8 (good).
   // We normalize this range to 0.0 - 1.0 so it plays nice with the math.
   // Formula: (Score - Min) / (Max - Min) -> roughly (Score - 0.3) / 0.5
   const normalizedContextScore = Math.min(Math.max((topChunkScore - 0.3) / 0.5, 0), 1);
 
-  // C. Final Formula
-  // 60% based on Keywords (Did the LLM stay on topic?)
-  // 40% based on Retrieval (Did we have good data?)
-  const confidence = (keywordScore * 0.6) + (normalizedContextScore * 0.4);
+  // D. Final Formula - Weighted to emphasize groundedness (anti-hallucination)
+  // 50% Groundedness (Is the answer supported by sources? - PRIMARY ANTI-HALLUCINATION)
+  // 30% Keywords (Did the LLM stay on topic?)
+  // 20% Retrieval Quality (Did we have good data?)
+  const confidence = (normalizedGroundedness * 0.5) + (keywordScore * 0.3) + (normalizedContextScore * 0.2);
 
   return Math.round(confidence * 100);
 }
@@ -111,15 +144,21 @@ export const askVestige = async (userQuery: string, currentTurn: number) => {
     
     const answerText = result.content as string;
 
-    // 4. CALCULATE CONFIDENCE (The "Judge")
+    // 4. CALCULATE CONFIDENCE (The "Judge" - Anti-Hallucination Metric)
     // Use the #1 chunk's score as the baseline for "Input Quality"
+    // Pass the source context to check groundedness (inverse of hallucination)
     const topScore = memories.length > 0 ? memories[0].finalScore : 0;
-    const confidenceScore = calculateLocalConfidence(userQuery, answerText, topScore);
+    const confidenceScore = await calculateLocalConfidence(
+      userQuery, 
+      answerText, 
+      topScore,
+      topContext // Pass source context for groundedness check
+    );
 
     return {
       answer: answerText,
       sources: memories.slice(0, 3), // Return sources so UI can show them
-      confidence: confidenceScore // <--- The new metric
+      confidence: confidenceScore // <--- Confidence inversely correlates with hallucination
     };
 
   } catch (error) {

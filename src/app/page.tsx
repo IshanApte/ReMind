@@ -63,19 +63,35 @@ export default function Home() {
     ? messages[selectedMessageIndex]?.sources 
     : null;
   
-  // Get all accessed chunk IDs with their access counts from all messages
-  const accessedChunkIds = useMemo(() => {
+  // Get chunk scores for the current question (selected message or most recent)
+  const currentChunkScores = useMemo(() => {
     const chunkMap = new Map<number | string, number>();
-    messages.forEach(msg => {
-      if (msg.sources) {
-        msg.sources.forEach(source => {
-          const currentCount = chunkMap.get(source.id) || 0;
-          chunkMap.set(source.id, currentCount + 1);
-        });
+    
+    // Determine which message to use for the heatmap
+    let targetMessage: Message | null = null;
+    
+    if (selectedMessageIndex !== null && messages[selectedMessageIndex]?.sources) {
+      // Use selected message if it has sources
+      targetMessage = messages[selectedMessageIndex];
+    } else {
+      // Otherwise, find the most recent assistant message with sources
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'assistant' && messages[i].sources && messages[i].sources.length > 0) {
+          targetMessage = messages[i];
+          break;
+        }
       }
-    });
+    }
+    
+    // Map chunk IDs to their finalScore values
+    if (targetMessage?.sources) {
+      targetMessage.sources.forEach(source => {
+        chunkMap.set(source.id, source.finalScore);
+      });
+    }
+    
     return chunkMap;
-  }, [messages]);
+  }, [messages, selectedMessageIndex]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,7 +168,7 @@ export default function Home() {
           <div className="mb-6">
             <BookHeatmap
               chunksMetadata={chunksMetadata}
-              accessedChunkIds={accessedChunkIds}
+              chunkScores={currentChunkScores}
               totalLines={totalLines}
             />
           </div>
@@ -179,7 +195,7 @@ export default function Home() {
                   }`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-lg p-4 cursor-pointer transition-all ${
+                    className={`relative max-w-[80%] rounded-lg p-4 cursor-pointer transition-all ${
                       msg.role === 'user'
                         ? 'bg-blue-600 text-white hover:bg-blue-700'
                         : `bg-slate-600 text-white hover:bg-slate-500 ${
@@ -198,23 +214,35 @@ export default function Home() {
                   >
                     {/* --- 3. CONFIDENCE BADGE UI --- */}
                     {msg.role === 'assistant' && msg.confidence !== undefined && (
-                      <div className={`
-                        inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium mb-3
-                        ${msg.confidence >= 80 ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-500/30' : 
-                          msg.confidence >= 50 ? 'bg-amber-500/20 text-amber-100 border border-amber-500/30' : 
-                          'bg-rose-500/20 text-rose-100 border border-rose-500/30'}
-                      `}>
-                        {msg.confidence >= 80 ? (
-                          <span className="text-[10px]">🛡️ Verified</span>
-                        ) : msg.confidence >= 50 ? (
-                          <span className="text-[10px]">⚠️ Uncertain</span>
-                        ) : (
-                          <span className="text-[10px]">❌ Low Confidence</span>
-                        )}
+                      <div className="group relative mb-3">
+                        <div className={`
+                          cursor-help inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
+                          ${msg.confidence >= 80 ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-500/30' : 
+                            msg.confidence >= 50 ? 'bg-amber-500/20 text-amber-100 border border-amber-500/30' : 
+                            'bg-rose-500/20 text-rose-100 border border-rose-500/30'}
+                        `}>
+                          {msg.confidence >= 80 ? (
+                            <span className="text-[10px]">🛡️ Verified</span>
+                          ) : msg.confidence >= 50 ? (
+                            <span className="text-[10px]">⚠️ Uncertain</span>
+                          ) : (
+                            <span className="text-[10px]">❌ Low Confidence</span>
+                          )}
+                          
+                          <span className="opacity-75 border-l border-white/10 pl-1.5 ml-0.5">
+                            {msg.confidence}%
+                          </span>
+                        </div>
                         
-                        <span className="opacity-75 border-l border-white/10 pl-1.5 ml-0.5">
-                          {msg.confidence}%
-                        </span>
+                        {/* Tooltip - positioned relative to message bubble to avoid overflow clipping */}
+                        <div className="invisible group-hover:visible absolute bottom-full left-0 mb-2 w-64 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 z-[100] pointer-events-none">
+                          <div className="font-semibold mb-1">Confidence Score (0-100)</div>
+                          <div className="text-slate-300 leading-relaxed">
+                            Indicates how well the answer stays aligned with the source material, indicating the risk of hallucination. Calculated from groundedness (50%), keyword overlap (30%), and context quality (20%).
+                          </div>
+                          {/* Tooltip arrow */}
+                          <div className="absolute top-full left-4 -mt-1 w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45"></div>
+                        </div>
                       </div>
                     )}
 
