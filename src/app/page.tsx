@@ -117,35 +117,18 @@ export default function Home() {
         body: JSON.stringify({ query: currentInput })
       });
 
-      const data = await response.json();
-
-      // Handle rate limiting gracefully
-      if (response.status === 429) {
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `${data.message || 'Rate limit reached'}\n\n💡 **Portfolio Note**: This rate limiting demonstrates production-ready API protection. In a real application, this might use user authentication for personalized limits.\n\n${data.tip || ''}`,
-          confidence: 0
-        }]);
-        return;
-      }
-
       if (!response.ok) {
-        // Handle other API errors
-        const errorMessage = data.message || 'Failed to get response';
-        setMessages(prev => [...prev, {
-          role: 'assistant',
-          content: `⚠️ ${errorMessage}\n\n${data.portfolio ? `💼 **Portfolio Demo**: ${data.portfolio}` : ''}`,
-          confidence: 0
-        }]);
-        return;
+        throw new Error('Failed to get response');
       }
 
+      const data = await response.json();
+      
       const assistantMessage: Message = {
         role: 'assistant',
         content: data.answer,
         sources: data.sources,
         turn: data.turn,
-        confidence: data.confidence
+        confidence: data.confidence // <--- 2. Map confidence from API
       };
 
       setMessages(prev => {
@@ -160,7 +143,7 @@ export default function Home() {
       console.error('Error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Sorry, I encountered an error processing your question. This error handling demonstrates professional frontend error management in portfolio projects.'
+        content: 'Sorry, I encountered an error processing your question. Please try again.'
       }]);
     } finally {
       setLoading(false);
@@ -175,18 +158,9 @@ export default function Home() {
           <h1 className="text-4xl font-bold text-white mb-2">
             ReMind
           </h1>
-          <p className="text-slate-300 mb-3">
+          <p className="text-slate-300">
             AI with human-like memory dynamics
           </p>
-          {/* Professional portfolio indicator */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/20 rounded-full border border-blue-500/30 mb-2">
-            <span className="text-blue-200 text-sm">
-              🚀 Portfolio Demo • Rate-limited for cost protection • 15 queries per 5min
-            </span>
-          </div>
-          <div className="text-xs text-slate-400 mt-1">
-            Try asking: "What is photosynthesis?" • "How do cells divide?" • "Explain DNA replication"
-          </div>
         </header>
 
         {/* Book Heatmap */}
@@ -384,8 +358,19 @@ export default function Home() {
                           <span className="font-semibold">Final Score:</span> {source.finalScore.toFixed(3)}
                         </span>
                         {source.recencyScore !== undefined && (
-                          <span>
-                            <span className="font-semibold">Recency:</span> {source.recencyScore.toFixed(3)}
+                          <span className="group relative">
+                            <span className="cursor-help">
+                              <span className="font-semibold">Decay Score:</span> {source.recencyScore.toFixed(3)}
+                            </span>
+                            {/* Tooltip - positioned relative to avoid overflow clipping */}
+                            <div className="invisible group-hover:visible absolute bottom-full left-0 mb-2 w-56 p-2.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 z-[100] pointer-events-none">
+                              <div className="font-semibold mb-1">Decay Score (0.0-1.0)</div>
+                              <div className="text-slate-300 leading-relaxed">
+                                How fresh a memory is. Recently accessed memories score higher (closer to 1.0), while older ones fade but never disappear, like human memory.
+                              </div>
+                              {/* Tooltip arrow */}
+                              <div className="absolute top-full left-4 -mt-1 w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45"></div>
+                            </div>
                           </span>
                         )}
                       </div>
