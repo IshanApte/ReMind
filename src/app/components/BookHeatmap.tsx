@@ -13,66 +13,15 @@ interface BookHeatmapProps {
 }
 
 export default function BookHeatmap({ chunksMetadata, accessedChunkIds, totalLines }: BookHeatmapProps) {
-  // Convert accessed chunk IDs to usage counts
-  const chunkUsage = new Map<number, number>();
-  accessedChunkIds.forEach((count, id) => {
-    const numId = typeof id === 'string' ? parseInt(id, 10) : id;
-    if (!isNaN(numId)) {
-      chunkUsage.set(numId, count);
-    }
-  });
+  // Helper to determine color based on access count (Thermal Logic)
+  const getChunkColor = (accessCount: number | undefined) => {
+    if (!accessCount || accessCount === 0) return 'bg-gray-800'; // Cold/Dormant
 
-  // Find max usage for normalization
-  const maxUsage = Math.max(...Array.from(chunkUsage.values()), 1);
-
-  // Calculate heatmap segments - divide the book into ~100 segments for smooth rendering
-  const numSegments = 200;
-  const segmentLength = totalLines / numSegments;
-  const segmentUsage = new Array(numSegments).fill(0);
-
-  // Map chunks to segments and aggregate usage
-  chunksMetadata.forEach((chunk) => {
-    const usageCount = chunkUsage.get(chunk.id) || 0;
-    if (usageCount > 0) {
-      const startSegment = Math.floor(chunk.start_line / segmentLength);
-      const endSegment = Math.floor(chunk.end_line / segmentLength);
-      
-      for (let seg = startSegment; seg <= endSegment && seg < numSegments; seg++) {
-        segmentUsage[seg] = Math.max(segmentUsage[seg], usageCount);
-      }
-    }
-  });
-
-  // Normalize to 0-1 range
-  const normalizedUsage = segmentUsage.map(count => count / maxUsage);
-
-  // Color intensity function (cool to hot: slate -> blue -> yellow -> red)
-  const getColor = (intensity: number): string => {
-    if (intensity === 0) return '#475569'; // slate-600
-    
-    // Smooth gradient from blue to yellow to red
-    if (intensity < 0.33) {
-      // Blue gradient (slate -> blue)
-      const t = intensity / 0.33;
-      const r = Math.round(71 + (59 - 71) * t);
-      const g = Math.round(85 + (130 - 85) * t);
-      const b = Math.round(105 + (246 - 105) * t);
-      return `rgb(${r}, ${g}, ${b})`;
-    } else if (intensity < 0.66) {
-      // Blue to yellow
-      const t = (intensity - 0.33) / 0.33;
-      const r = Math.round(59 + (234 - 59) * t);
-      const g = Math.round(130 + (179 - 130) * t);
-      const b = Math.round(246 + (8 - 246) * t);
-      return `rgb(${r}, ${g}, ${b})`;
-    } else {
-      // Yellow to red
-      const t = (intensity - 0.66) / 0.34;
-      const r = Math.round(234 + (239 - 234) * t);
-      const g = Math.round(179 + (68 - 179) * t);
-      const b = Math.round(8 + (68 - 8) * t);
-      return `rgb(${r}, ${g}, ${b})`;
-    }
+    // Map frequency to heat
+    if (accessCount >= 4) return 'bg-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.8)] z-10'; // 🔥 Burning Hot
+    if (accessCount === 3) return 'bg-yellow-400'; // ⚠️ Hot
+    if (accessCount === 2) return 'bg-blue-400'; // ❄️ Warm
+    return 'bg-indigo-900'; // 🧊 Cooling (1 access)
   };
 
   const totalAccessed = Array.from(accessedChunkIds.values()).reduce((sum, count) => sum + count, 0);
@@ -92,31 +41,36 @@ export default function BookHeatmap({ chunksMetadata, accessedChunkIds, totalLin
         <div className="flex items-center gap-3 text-xs">
           <span className="text-slate-400">Less</span>
           <div className="flex gap-0.5 h-3">
-            {[...Array(10)].map((_, i) => {
-              const intensity = i / 9;
-              return (
-                <div
-                  key={i}
-                  className="w-3 h-full rounded-sm"
-                  style={{ backgroundColor: getColor(intensity) }}
-                />
-              );
-            })}
+             <div className="w-3 h-full rounded-sm bg-gray-800" title="0 accesses"></div>
+             <div className="w-3 h-full rounded-sm bg-indigo-900" title="1 access"></div>
+             <div className="w-3 h-full rounded-sm bg-blue-400" title="2 accesses"></div>
+             <div className="w-3 h-full rounded-sm bg-yellow-400" title="3 accesses"></div>
+             <div className="w-3 h-full rounded-sm bg-orange-500" title="4+ accesses"></div>
           </div>
           <span className="text-slate-400">More</span>
         </div>
       </div>
       
       {/* Heatmap Bar */}
-      <div className="w-full h-8 bg-slate-800 rounded-md overflow-hidden flex">
-        {normalizedUsage.map((intensity, idx) => (
-          <div
-            key={idx}
-            className="flex-1 border-r border-slate-900 last:border-r-0 transition-colors hover:opacity-80"
-            style={{ backgroundColor: getColor(intensity) }}
-            title={`Lines ${Math.round(idx * segmentLength)}-${Math.round((idx + 1) * segmentLength)}: ${segmentUsage[idx]} access${segmentUsage[idx] !== 1 ? 'es' : ''}`}
-          />
-        ))}
+      <div className="w-full h-8 bg-slate-900 rounded-md overflow-hidden flex relative border border-gray-800">
+        {chunksMetadata.map((chunk) => {
+          // Calculate width percentage based on actual text length
+          // Prevent division by zero
+          const safeTotalLines = totalLines > 0 ? totalLines : 1;
+          const widthPercent = ((chunk.end_line - chunk.start_line) / safeTotalLines) * 100;
+          
+          // Handle string/number id mismatch
+          const count = accessedChunkIds.get(chunk.id) || accessedChunkIds.get(String(chunk.id));
+          
+          return (
+            <div
+              key={chunk.id}
+              className={`h-full transition-all duration-500 border-r border-slate-900/50 last:border-r-0 ${getChunkColor(count)}`}
+              style={{ width: `${widthPercent}%` }}
+              title={`Chunk #${chunk.id} (Accessed: ${count || 0} times)`}
+            />
+          );
+        })}
       </div>
       
       {/* Start/End Labels */}
@@ -127,4 +81,3 @@ export default function BookHeatmap({ chunksMetadata, accessedChunkIds, totalLin
     </div>
   );
 }
-

@@ -102,6 +102,7 @@ app.post('/api/query', async (req: Request, res: Response) => {
     // Prepare response with sources
     const response = {
       answer: result.answer,
+      confidence: result.confidence, // <--- ADD THIS LINE HERE
       sources: result.sources.map((s: any) => ({
         id: s.id,
         text: s.text.substring(0, 200) + (s.text.length > 200 ? '...' : ''),
@@ -135,4 +136,3 @@ app.listen(PORT, () => {
   console.log(`\n🚀 ReMind Backend Server running on http://localhost:${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/health\n`);
 });
-

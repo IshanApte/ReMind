@@ -27,6 +27,7 @@ interface Message {
   content: string;
   sources?: Source[];
   turn?: number;
+  confidence?: number; // <--- 1. Added confidence field
 }
 
 export default function Home() {
@@ -80,7 +81,6 @@ export default function Home() {
     e.preventDefault();
     const trimmedInput = input.trim();
     if (!trimmedInput || loading) {
-      console.log('Submit prevented:', { trimmedInput, loading });
       return;
     }
 
@@ -94,8 +94,6 @@ export default function Home() {
     setInput('');
     setLoading(true);
     
-    console.log('Submitting query:', currentInput);
-
     try {
       const response = await fetch('/api/query', {
         method: 'POST',
@@ -113,7 +111,8 @@ export default function Home() {
         role: 'assistant',
         content: data.answer,
         sources: data.sources,
-        turn: data.turn
+        turn: data.turn,
+        confidence: data.confidence // <--- 2. Map confidence from API
       };
 
       setMessages(prev => {
@@ -197,6 +196,28 @@ export default function Home() {
                       }
                     }}
                   >
+                    {/* --- 3. CONFIDENCE BADGE UI --- */}
+                    {msg.role === 'assistant' && msg.confidence !== undefined && (
+                      <div className={`
+                        inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium mb-3
+                        ${msg.confidence >= 80 ? 'bg-emerald-500/20 text-emerald-100 border border-emerald-500/30' : 
+                          msg.confidence >= 50 ? 'bg-amber-500/20 text-amber-100 border border-amber-500/30' : 
+                          'bg-rose-500/20 text-rose-100 border border-rose-500/30'}
+                      `}>
+                        {msg.confidence >= 80 ? (
+                          <span className="text-[10px]">🛡️ Verified</span>
+                        ) : msg.confidence >= 50 ? (
+                          <span className="text-[10px]">⚠️ Uncertain</span>
+                        ) : (
+                          <span className="text-[10px]">❌ Low Confidence</span>
+                        )}
+                        
+                        <span className="opacity-75 border-l border-white/10 pl-1.5 ml-0.5">
+                          {msg.confidence}%
+                        </span>
+                      </div>
+                    )}
+
                     <div className="whitespace-pre-wrap">{msg.content}</div>
                     
                     {msg.sources && msg.sources.length > 0 && (
@@ -325,4 +346,3 @@ export default function Home() {
     </div>
   );
 }
-

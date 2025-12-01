@@ -1,8 +1,8 @@
 import { retrieve } from '../retrieval/retrieval'; // Your existing engine
-import { model } from './model'; // The Gemini client we just made
+import { model } from './model'; // The Gemini client
 import { pipeline } from '@xenova/transformers';
 
-// Singleton for the embedding model (same pattern as retrieval test)
+// Singleton for the embedding model
 let extractor: any = null;
 
 async function getEmbedding(text: string): Promise<number[]> {
@@ -11,6 +11,48 @@ async function getEmbedding(text: string): Promise<number[]> {
   }
   const output = await extractor(text, { pooling: 'mean', normalize: true });
   return Array.from(output.data);
+}
+
+/**
+ * Calculates a "Trust Score" (0-100) without making extra API calls.
+ * It combines:
+ * 1. Keyword Overlap (Did the AI mention the specific nouns you asked about?)
+ * 2. Context Quality (Did our retrieval engine find good data?)
+ */
+function calculateLocalConfidence(query: string, answer: string, topChunkScore: number): number {
+  // A. Keyword Check: Did the answer actually use the words from the question?
+  // We filter out common stop words to find the "meat" of the question.
+  const stopWords = new Set(['the', 'is', 'at', 'which', 'on', 'a', 'an', 'and', 'or', 'but', 'how', 'what', 'why', 'who', 'does', 'do', 'can', 'explain', 'describe']);
+  
+  // Extract words longer than 3 chars that aren't stop words
+  const queryKeywords = query.toLowerCase().match(/\b\w+\b/g)?.filter(w => !stopWords.has(w) && w.length > 3) || [];
+  
+  const answerText = answer.toLowerCase();
+  let hitCount = 0;
+  
+  if (queryKeywords.length > 0) {
+    queryKeywords.forEach(kw => {
+      if (answerText.includes(kw)) hitCount++;
+    });
+  }
+  
+  // Calculate Keyword Ratio (0.0 to 1.0)
+  // If query was "mitral valve function" and answer has "mitral" and "valve", score is high.
+  // Default to 0.8 if no keywords found (e.g., "Hello") to give benefit of doubt.
+  const keywordScore = queryKeywords.length > 0 ? (hitCount / queryKeywords.length) : 0.8;
+
+  // B. Context Score Normalization
+  // Our cosine scores usually float between 0.3 (bad) and 0.8 (good).
+  // We normalize this range to 0.0 - 1.0 so it plays nice with the math.
+  // Formula: (Score - Min) / (Max - Min) -> roughly (Score - 0.3) / 0.5
+  const normalizedContextScore = Math.min(Math.max((topChunkScore - 0.3) / 0.5, 0), 1);
+
+  // C. Final Formula
+  // 60% based on Keywords (Did the LLM stay on topic?)
+  // 40% based on Retrieval (Did we have good data?)
+  const confidence = (keywordScore * 0.6) + (normalizedContextScore * 0.4);
+
+  return Math.round(confidence * 100);
 }
 
 export const askVestige = async (userQuery: string, currentTurn: number) => {
@@ -54,15 +96,34 @@ export const askVestige = async (userQuery: string, currentTurn: number) => {
     `;
 
     // Send to Gemini
-    const result = await model.invoke(prompt);
+    // We add a safety try/catch here specifically for the model invocation
+    let result;
+    try {
+      result = await model.invoke(prompt);
+    } catch (llmError) {
+      console.error("⚠️ Gemini API Refused to Answer:", llmError);
+      return { 
+        answer: "I retrieved the memory, but I'm having trouble verbalizing it right now. (Safety Block Triggered)", 
+        sources: memories.slice(0, 3),
+        confidence: 0 
+      };
+    }
     
+    const answerText = result.content as string;
+
+    // 4. CALCULATE CONFIDENCE (The "Judge")
+    // Use the #1 chunk's score as the baseline for "Input Quality"
+    const topScore = memories.length > 0 ? memories[0].finalScore : 0;
+    const confidenceScore = calculateLocalConfidence(userQuery, answerText, topScore);
+
     return {
-      answer: result.content,
-      sources: memories.slice(0, 3) // Return sources so UI can show them
+      answer: answerText,
+      sources: memories.slice(0, 3), // Return sources so UI can show them
+      confidence: confidenceScore // <--- The new metric
     };
 
   } catch (error) {
     console.error("❌ RAG Pipeline Failed:", error);
-    return { answer: "My memory pathways are currently blocked.", sources: [] };
+    return { answer: "My memory pathways are currently blocked.", sources: [], confidence: 0 };
   }
 };
