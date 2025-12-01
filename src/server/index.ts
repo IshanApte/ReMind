@@ -1,6 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import rateLimit from 'express-rate-limit';
 import * as fs from 'fs';
 import * as path from 'path';
 import { askVestige } from './langchain/rag';
@@ -11,6 +12,38 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.BACKEND_PORT || 3001;
+
+// Rate limiting configurations for LinkedIn portfolio demo
+const portfolioQueryLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 15, // 15 queries per 5 minutes (3 per minute average)
+  message: {
+    error: '🤖 Demo rate limit reached',
+    message: 'This is a portfolio demo with API cost protection. Please wait 5 minutes to continue exploring.',
+    tip: 'Try asking about: cell biology, genetics, photosynthesis, or cellular respiration',
+    retryAfter: '5 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Skip rate limiting for localhost during development
+  skip: (req) => {
+    const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+    return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  }
+});
+
+// General API protection for metadata and health endpoints
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes  
+  max: 200, // Generous for UI interactions (heatmap, metadata, etc.)
+  message: {
+    error: 'Rate limit exceeded',
+    message: 'Please wait a few minutes before continuing.',
+    retryAfter: '15 minutes'
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // Middleware
 app.use(cors());
@@ -51,13 +84,17 @@ const loadChunksMetadata = () => {
   return [];
 };
 
-// Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok', message: 'ReMind backend server is running' });
+// Health check endpoint with light rate limiting
+app.get('/health', generalLimiter, (req: Request, res: Response) => {
+  res.json({ 
+    status: 'ok', 
+    message: 'ReMind backend server is running',
+    portfolio: 'LinkedIn demo with professional rate limiting'
+  });
 });
 
-// Chunks metadata endpoint
-app.get('/api/chunks/metadata', (req: Request, res: Response) => {
+// Chunks metadata endpoint with rate limiting
+app.get('/api/chunks/metadata', generalLimiter, (req: Request, res: Response) => {
   try {
     const metadata = loadChunksMetadata();
     
@@ -77,16 +114,20 @@ app.get('/api/chunks/metadata', (req: Request, res: Response) => {
   }
 });
 
-// Query endpoint
-app.post('/api/query', async (req: Request, res: Response) => {
+// Query endpoint with portfolio-friendly rate limiting
+app.post('/api/query', portfolioQueryLimiter, async (req: Request, res: Response) => {
   try {
     const { query } = req.body;
 
     if (!query || typeof query !== 'string') {
-      return res.status(400).json({ error: 'Query is required' });
+      return res.status(400).json({ 
+        error: 'Query is required',
+        example: '{ "query": "What is photosynthesis?" }',
+        portfolio: 'This demonstrates input validation in production APIs'
+      });
     }
 
-    console.log(`\n📥 Received query: "${query}" (Turn ${currentTurn})`);
+    console.log(`\n📥 [Portfolio Demo] Query: "${query}" (Turn ${currentTurn})`);
 
     // Call the RAG system
     const result = await askVestige(query, currentTurn);
@@ -102,7 +143,7 @@ app.post('/api/query', async (req: Request, res: Response) => {
     // Prepare response with sources
     const response = {
       answer: result.answer,
-      confidence: result.confidence, // <--- ADD THIS LINE HERE
+      confidence: result.confidence,
       sources: result.sources.map((s: any) => ({
         id: s.id,
         text: s.text.substring(0, 200) + (s.text.length > 200 ? '...' : ''),
@@ -115,19 +156,25 @@ app.post('/api/query', async (req: Request, res: Response) => {
         start_line: s.start_line,
         end_line: s.end_line
       })),
-      turn: currentTurn
+      turn: currentTurn,
+      portfolio: {
+        note: 'This demonstrates RAG with temporal memory decay',
+        features: ['Semantic chunking', 'Vector embeddings', 'Confidence scoring', 'Anti-hallucination measures']
+      }
     };
 
     // Increment turn for next query
     currentTurn += 1;
 
-    console.log(`✅ Query processed successfully (Turn ${currentTurn - 1})`);
+    console.log(`✅ [Portfolio] Query processed successfully (Turn ${currentTurn - 1})`);
     res.json(response);
   } catch (error: any) {
     console.error('❌ Backend Error:', error);
     res.status(500).json({
       error: 'Failed to process query',
-      message: error.message
+      message: 'Portfolio demo encountered an issue. This would be logged and monitored in production.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      portfolio: 'This demonstrates professional error handling and logging practices'
     });
   }
 });

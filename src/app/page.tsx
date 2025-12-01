@@ -117,18 +117,35 @@ export default function Home() {
         body: JSON.stringify({ query: currentInput })
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to get response');
+      const data = await response.json();
+
+      // Handle rate limiting gracefully
+      if (response.status === 429) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `${data.message || 'Rate limit reached'}\n\n💡 **Portfolio Note**: This rate limiting demonstrates production-ready API protection. In a real application, this might use user authentication for personalized limits.\n\n${data.tip || ''}`,
+          confidence: 0
+        }]);
+        return;
       }
 
-      const data = await response.json();
-      
+      if (!response.ok) {
+        // Handle other API errors
+        const errorMessage = data.message || 'Failed to get response';
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `⚠️ ${errorMessage}\n\n${data.portfolio ? `💼 **Portfolio Demo**: ${data.portfolio}` : ''}`,
+          confidence: 0
+        }]);
+        return;
+      }
+
       const assistantMessage: Message = {
         role: 'assistant',
         content: data.answer,
         sources: data.sources,
         turn: data.turn,
-        confidence: data.confidence // <--- 2. Map confidence from API
+        confidence: data.confidence
       };
 
       setMessages(prev => {
@@ -143,7 +160,7 @@ export default function Home() {
       console.error('Error:', error);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        content: 'Sorry, I encountered an error processing your question. Please try again.'
+        content: 'Sorry, I encountered an error processing your question. This error handling demonstrates professional frontend error management in portfolio projects.'
       }]);
     } finally {
       setLoading(false);
@@ -158,9 +175,18 @@ export default function Home() {
           <h1 className="text-4xl font-bold text-white mb-2">
             ReMind
           </h1>
-          <p className="text-slate-300">
+          <p className="text-slate-300 mb-3">
             AI with human-like memory dynamics
           </p>
+          {/* Professional portfolio indicator */}
+          <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600/20 rounded-full border border-blue-500/30 mb-2">
+            <span className="text-blue-200 text-sm">
+              🚀 Portfolio Demo • Rate-limited for cost protection • 15 queries per 5min
+            </span>
+          </div>
+          <div className="text-xs text-slate-400 mt-1">
+            Try asking: "What is photosynthesis?" • "How do cells divide?" • "Explain DNA replication"
+          </div>
         </header>
 
         {/* Book Heatmap */}

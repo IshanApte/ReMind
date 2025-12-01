@@ -55,11 +55,13 @@ export default function BookHeatmap({ chunksMetadata, chunkScores, totalLines }:
       
       {/* Heatmap Bar */}
       <div className="w-full h-8 bg-slate-900 rounded-md overflow-hidden flex relative border border-gray-800">
-        {chunksMetadata.map((chunk) => {
-          // Calculate width percentage based on actual text length
-          // Prevent division by zero
-          const safeTotalLines = totalLines > 0 ? totalLines : 1;
-          const widthPercent = ((chunk.end_line - chunk.start_line) / safeTotalLines) * 100;
+        {chunksMetadata.map((chunk, index) => {
+          // OPTION 1: Uniform width for perfect visual consistency
+          const widthPercent = chunksMetadata.length > 0 ? (100 / chunksMetadata.length) : 1;
+          
+          // OPTION 2: Proportional with reasonable limits (uncomment to use)
+          // const rawWidthPercent = ((chunk.end_line - chunk.start_line) / (totalLines || 1)) * 100;
+          // const widthPercent = Math.max(0.3, Math.min(3, rawWidthPercent)); // 0.3% to 3% width limits
           
           // Handle string/number id mismatch
           const score = chunkScores.get(chunk.id) ?? chunkScores.get(String(chunk.id));
@@ -69,16 +71,16 @@ export default function BookHeatmap({ chunksMetadata, chunkScores, totalLines }:
               key={chunk.id}
               className={`h-full transition-all duration-500 border-r border-slate-900/50 last:border-r-0 ${getChunkColor(score)}`}
               style={{ width: `${widthPercent}%` }}
-              title={`Chunk #${chunk.id} ${score !== undefined ? `(Final Score: ${score.toFixed(3)})` : '(No score)'}`}
+              title={`Chunk #${chunk.id} (Lines ${chunk.start_line}-${chunk.end_line}, ${chunk.end_line - chunk.start_line} lines) ${score !== undefined ? `• Final Score: ${score.toFixed(3)}` : '• No score'}`}
             />
           );
         })}
       </div>
       
-      {/* Start/End Labels */}
+      {/* Chunk Position Labels */}
       <div className="flex justify-between text-xs text-slate-400 mt-1">
-        <span>Start</span>
-        <span>End</span>
+        <span>First Chunk</span>
+        <span>Last Chunk (Hover for details)</span>
       </div>
     </div>
   );
