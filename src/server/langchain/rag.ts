@@ -97,7 +97,7 @@ export const askVestige = async (userQuery: string, currentTurn: number) => {
     const queryVector = await getEmbedding(userQuery);
 
     // 2. RETRIEVE (The "Memory")
-    // Get top 3 chunks using your blended score (Similarity + Decay)
+    // Get chunks using your blended score (Similarity + Decay)
     const memories = retrieve(queryVector, {
       alpha: 0.6,      // 60% Semantic Match
       beta: 0.4,       // 40% Recency Bias
@@ -106,10 +106,24 @@ export const askVestige = async (userQuery: string, currentTurn: number) => {
       currentTurn: currentTurn
     });
 
-    // Take the top 3 most relevant chunks
-    const topContext = memories.slice(0, 3).map(m => m.text).join("\n---\n");
+    // Hybrid selection: chunks with score > 0.7 OR top 5 (whichever gives more)
+    const scoreThreshold = 0.7;
+    const minChunks = 5;
+
+    // Get chunks above threshold
+    const highScoreChunks = memories.filter(m => m.finalScore > scoreThreshold);
+
+    // Get top 5 chunks
+    const top5Chunks = memories.slice(0, minChunks);
+
+    // Use whichever set is larger (ensures quality OR minimum coverage)
+    const selectedChunks = highScoreChunks.length >= minChunks 
+      ? highScoreChunks 
+      : top5Chunks;
+
+    const topContext = selectedChunks.map(m => m.text).join("\n---\n");
     
-    console.log(`📚 Found ${memories.length} memories. Using top 3.`);
+    console.log(`📚 Found ${memories.length} memories. Using ${selectedChunks.length} chunks (${highScoreChunks.length} above ${scoreThreshold} threshold, ${top5Chunks.length} in top 5).`);
 
     // 3. GENERATE (The "Voice")
     // Construct the RAG Prompt
@@ -137,7 +151,7 @@ export const askVestige = async (userQuery: string, currentTurn: number) => {
       console.error("⚠️ Gemini API Refused to Answer:", llmError);
       return { 
         answer: "I retrieved the memory, but I'm having trouble verbalizing it right now. (Safety Block Triggered)", 
-        sources: memories.slice(0, 3),
+        sources: selectedChunks,
         confidence: 0 
       };
     }
@@ -157,7 +171,7 @@ export const askVestige = async (userQuery: string, currentTurn: number) => {
 
     return {
       answer: answerText,
-      sources: memories.slice(0, 3), // Return sources so UI can show them
+      sources: selectedChunks, // Return sources so UI can show them
       confidence: confidenceScore // <--- Confidence inversely correlates with hallucination
     };
 
