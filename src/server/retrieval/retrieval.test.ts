@@ -7,7 +7,7 @@ import {
   type RetrievalOptions,
 } from './retrieval';
 
-// Small fake memory bank so tests are cheap and deterministic.
+// Minimal test data for deterministic results
 const fakeBank: MemoryChunk[] = [
   { id: 1, text: 'heart pumps blood', embedding: [1, 0] },
   { id: 2, text: 'neuron fires', embedding: [0, 1] },
@@ -31,7 +31,7 @@ beforeEach(() => {
 describe('retrieve basic behavior', () => {
   it('falls back to pure similarity when beta = 0', () => {
     const results = retrieve(queryVec, { ...baseOpts, beta: 0 });
-    // Scores should be ordered purely by similarity: chunk 1 closer to [1,0] than chunk 2.
+    // Should rank by similarity only
     expect(results[0].finalScore).toBeGreaterThanOrEqual(results[1].finalScore);
     // Decay score is still computed as 1.0 in this mode.
     results.forEach(r => expect(r.recencyScore).toBeCloseTo(1, 5));
@@ -55,19 +55,19 @@ describe('sequential queries and decay', () => {
     // Turn 5: retrieve again without reinforcing the second chunk.
     results = retrieve(queryVec, { ...baseOpts, currentTurn: 5 });
     const chunk1 = results.find(r => r.id === topId)!;      // reinforced at turn 1
-    const chunk2 = results.find(r => r.id !== topId)!;      // never reinforced -> treated as fresh
+    const chunk2 = results.find(r => r.id !== topId)!;      // never reinforced
 
-    // Reinforced chunk is older -> lower decay score than a fresh unseen chunk.
+    // Reinforced chunk should have lower decay score
     expect(chunk1.recencyScore).toBeLessThan(1);
     expect(chunk2.recencyScore).toBeGreaterThanOrEqual(chunk1.recencyScore);
   });
 
-  it('illustrates that fresh unseen chunks can outrank older reinforced ones with this decay policy', () => {
-    // Adjust fake bank: chunk 1 slightly lower similarity, chunk 2 higher.
+  it('shows fresh chunks can outrank older reinforced ones', () => {
+    // Adjust similarities: chunk 1 lower, chunk 2 higher
     fakeBank[0].embedding = [0.9, 0.1];
-    fakeBank[1].embedding = [1, 0]; // slightly better aligned with query
+    fakeBank[1].embedding = [1, 0];
 
-    // Turn 1–3: always reinforce chunk 1 as if it's used in answers.
+    // Reinforce chunk 1 for multiple turns
     for (let turn = 1; turn <= 3; turn++) {
       const res = retrieve(queryVec, { ...baseOpts, currentTurn: turn });
       const chunk1 = res.find(r => r.id === 1)!;
@@ -80,7 +80,7 @@ describe('sequential queries and decay', () => {
     const c1 = results.find(r => r.id === 1)!;
     const c2 = results.find(r => r.id === 2)!;
 
-    // With this policy, the never‑reinforced (fresh) chunk can have higher final score.
+    // Fresh chunk can have higher final score
     expect(c2.finalScore).toBeGreaterThanOrEqual(c1.finalScore);
   });
 }
