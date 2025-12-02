@@ -19,7 +19,7 @@ describe('calculateActivation (exponential decay with half-life + floor)', () =>
   it('approaches the floor for very large deltaT', () => {
     const t = calculateActivation(1000, halfLife, lambdaFloor);
     expect(t).toBeGreaterThanOrEqual(lambdaFloor);
-    // Should be very close to the floor.
+    // Should approach floor value
     expect(t).toBeLessThan(lambdaFloor + 0.01);
   });
 

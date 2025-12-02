@@ -1,4 +1,3 @@
-// src/server/langchain/model.ts
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import * as dotenv from "dotenv";
@@ -6,14 +5,13 @@ import * as dotenv from "dotenv";
 dotenv.config();
 
 export const model = new ChatGoogleGenerativeAI({
-  // ✅ We confirmed this model exists in your list
   model: "gemini-2.0-flash", 
   
   maxOutputTokens: 1024,
   temperature: 0.7,
   apiKey: process.env.GOOGLE_API_KEY,
   
-  // Use High thresholds to prevent empty/blocked responses
+  // Safety settings to prevent empty/blocked responses
   safetySettings: [
     {
       category: HarmCategory.HARM_CATEGORY_HARASSMENT,

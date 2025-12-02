@@ -13,10 +13,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.BACKEND_PORT || 3001;
 
-// Rate limiting configurations for LinkedIn portfolio demo
+// Rate limiting for portfolio demo
 const portfolioQueryLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 15, // 15 queries per 5 minutes (3 per minute average)
+  max: 15, // 3 queries per minute average
   message: {
     error: '🤖 Demo rate limit reached',
     message: 'This is a portfolio demo with API cost protection. Please wait 5 minutes to continue exploring.',
@@ -25,17 +25,17 @@ const portfolioQueryLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Skip rate limiting for localhost during development
+  // Skip rate limiting for localhost
   skip: (req) => {
     const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
     return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
   }
 });
 
-// General API protection for metadata and health endpoints
+// Rate limiting for API endpoints
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes  
-  max: 200, // Generous for UI interactions (heatmap, metadata, etc.)
+  max: 200, // For UI interactions
   message: {
     error: 'Rate limit exceeded',
     message: 'Please wait a few minutes before continuing.',
@@ -49,7 +49,7 @@ const generalLimiter = rateLimit({
 app.use(cors());
 app.use(express.json());
 
-// Track conversation turns across requests (in-memory)
+// Track conversation turns
 let currentTurn = 1;
 
 // Load chunks metadata
@@ -65,7 +65,7 @@ const loadChunksMetadata = () => {
       return chunksMetadata;
     }
     
-    // Fallback: load from full chunks file and extract metadata
+    // Fallback: extract metadata from full chunks file
     const chunksPath = path.join(process.cwd(), 'data', 'chunks_embeddings.json');
     if (fs.existsSync(chunksPath)) {
       const fileContents = fs.readFileSync(chunksPath, 'utf-8');
@@ -84,7 +84,7 @@ const loadChunksMetadata = () => {
   return [];
 };
 
-// Health check endpoint with light rate limiting
+// Health check endpoint
 app.get('/health', generalLimiter, (req: Request, res: Response) => {
   res.json({ 
     status: 'ok', 
@@ -93,7 +93,7 @@ app.get('/health', generalLimiter, (req: Request, res: Response) => {
   });
 });
 
-// Chunks metadata endpoint with rate limiting
+// Chunks metadata endpoint
 app.get('/api/chunks/metadata', generalLimiter, (req: Request, res: Response) => {
   try {
     const metadata = loadChunksMetadata();
@@ -114,7 +114,7 @@ app.get('/api/chunks/metadata', generalLimiter, (req: Request, res: Response) =>
   }
 });
 
-// Query endpoint with portfolio-friendly rate limiting
+// Query endpoint
 app.post('/api/query', portfolioQueryLimiter, async (req: Request, res: Response) => {
   try {
     const { query } = req.body;
@@ -140,7 +140,7 @@ app.post('/api/query', portfolioQueryLimiter, async (req: Request, res: Response
       );
     }
 
-    // Prepare response with sources
+    // Build response with truncated sources
     const response = {
       answer: result.answer,
       confidence: result.confidence,
@@ -163,7 +163,7 @@ app.post('/api/query', portfolioQueryLimiter, async (req: Request, res: Response
       }
     };
 
-    // Increment turn for next query
+    // Increment turn counter
     currentTurn += 1;
 
     console.log(`✅ [Portfolio] Query processed successfully (Turn ${currentTurn - 1})`);
