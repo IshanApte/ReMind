@@ -80,7 +80,7 @@ export default function BookHeatmap({ chunksMetadata, chunkScores, totalLines }:
       {/* Chunk Position Labels */}
       <div className="flex justify-between text-xs text-slate-400 mt-1">
         <span>First Chunk</span>
-        <span>Last Chunk (Hover for details)</span>
+        <span>Last Chunk</span>
       </div>
     </div>
   );

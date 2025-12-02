@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import BookHeatmap from './components/BookHeatmap';
+import Onboarding from './components/Onboarding';
 
 interface ChunkMetadata {
   id: number;
@@ -37,6 +38,21 @@ export default function Home() {
   const [selectedMessageIndex, setSelectedMessageIndex] = useState<number | null>(null);
   const [chunksMetadata, setChunksMetadata] = useState<ChunkMetadata[]>([]);
   const [totalLines, setTotalLines] = useState<number>(0);
+  const [showOnboarding, setShowOnboarding] = useState(true);
+  
+  // Portfolio URLs
+  const developerPortfolios = {
+    ishan: 'https://ishan.info/',
+    prathamesh: 'https://www.prathamesh-more.com/'
+  };
+  
+  // Check if user has seen onboarding before
+  useEffect(() => {
+    const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
+    if (hasSeenOnboarding === 'true') {
+      setShowOnboarding(false);
+    }
+  }, []);
   
   // Load chunk metadata on mount
   useEffect(() => {
@@ -76,8 +92,9 @@ export default function Home() {
     } else {
       // Otherwise, find the most recent assistant message with sources
       for (let i = messages.length - 1; i >= 0; i--) {
-        if (messages[i].role === 'assistant' && messages[i].sources && messages[i].sources.length > 0) {
-          targetMessage = messages[i];
+        const message = messages[i];
+        if (message && message.role === 'assistant' && message.sources && message.sources.length > 0) {
+          targetMessage = message;
           break;
         }
       }
@@ -151,17 +168,44 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-800">
-      <div className="container mx-auto px-4 py-8">
-        {/* Header */}
-        <header className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-white mb-2">
-            ReMind
-          </h1>
-          <p className="text-slate-300">
-            AI with human-like memory dynamics
-          </p>
-        </header>
+    <>
+      {showOnboarding && (
+        <Onboarding onComplete={() => setShowOnboarding(false)} />
+      )}
+      
+      <div className="min-h-screen bg-slate-800">
+        <div className="container mx-auto px-4 pt-4 pb-8">
+          {/* Header */}
+          <header className="mb-8 text-center">
+            <h1 className="text-4xl font-bold text-white mb-2">
+              Beyond RAG
+            </h1>
+            <p className="text-slate-300">
+              Dynamic Memory That Adapts to Topic Flow
+            </p>
+            <div className="mt-4 flex items-center justify-center gap-2 text-sm">
+              <p className="text-xs text-slate-400 font-medium">
+                Developers
+              </p>
+              <a
+                href={developerPortfolios.prathamesh}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-400 hover:text-white transition-colors duration-200 font-medium hover:underline underline-offset-4"
+              >
+                Prathamesh
+              </a>
+              <span className="text-slate-500">&</span>
+              <a
+                href={developerPortfolios.ishan}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-slate-400 hover:text-white transition-colors duration-200 font-medium hover:underline underline-offset-4"
+              >
+                Ishan
+              </a>
+            </div>
+          </header>
 
         {/* Book Heatmap */}
         {chunksMetadata.length > 0 && totalLines > 0 && (
@@ -182,8 +226,7 @@ export default function Home() {
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {messages.length === 0 && (
                 <div className="text-center text-slate-400 mt-12">
-                  <p className="text-lg mb-2">👋 Welcome to ReMind</p>
-                  <p>Ask me anything about the biology textbook!</p>
+                  <p className="text-lg mb-4 whitespace-pre-wrap">"Give me a high-level overview of the circulatory system."{'\n\n'}"What's the difference between mitosis and meiosis?"{'\n\n'}"How does gas exchange work in the lungs?"</p>
                 </div>
               )}
 
@@ -383,5 +426,6 @@ export default function Home() {
         </div>
       </div>
     </div>
+    </>
   );
 }
