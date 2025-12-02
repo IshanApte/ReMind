@@ -1,3 +1,11 @@
+/**
+ * Main Page Component
+ * -------------------
+ * This is the entry point for the Beyond RAG web application. It handles message state, 
+ * user input, loading and onboarding modal, and fetches chunk metadata for the BookHeatmap visualization.
+ * The layout and state hooks support sending user queries, rendering assistant responses, and visualizing
+ * relevant book chunks to help users zero in on topics of interest.
+ */
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -28,7 +36,7 @@ interface Message {
   content: string;
   sources?: Source[];
   turn?: number;
-  confidence?: number; // <--- 1. Added confidence field
+  confidence?: number;
 }
 
 export default function Home() {
@@ -40,13 +48,11 @@ export default function Home() {
   const [totalLines, setTotalLines] = useState<number>(0);
   const [showOnboarding, setShowOnboarding] = useState(true);
   
-  // Portfolio URLs
   const developerPortfolios = {
     ishan: 'https://ishan.info/',
     prathamesh: 'https://www.prathamesh-more.com/'
   };
   
-  // Load chunk metadata on mount
   useEffect(() => {
     const loadMetadata = async () => {
       try {
@@ -63,26 +69,18 @@ export default function Home() {
     loadMetadata();
   }, []);
   
-  // Check if button should be enabled
   const isButtonDisabled = loading || !input.trim();
   
-  // Get sources for the selected message
   const selectedSources = selectedMessageIndex !== null 
     ? messages[selectedMessageIndex]?.sources 
     : null;
   
-  // Get chunk scores for the current question (selected message or most recent)
   const currentChunkScores = useMemo(() => {
     const chunkMap = new Map<number | string, number>();
-    
-    // Determine which message to use for the heatmap
     let targetMessage: Message | null = null;
-    
     if (selectedMessageIndex !== null && messages[selectedMessageIndex]?.sources) {
-      // Use selected message if it has sources
       targetMessage = messages[selectedMessageIndex];
     } else {
-      // Otherwise, find the most recent assistant message with sources
       for (let i = messages.length - 1; i >= 0; i--) {
         const message = messages[i];
         if (message && message.role === 'assistant' && message.sources && message.sources.length > 0) {
@@ -91,14 +89,11 @@ export default function Home() {
         }
       }
     }
-    
-    // Map chunk IDs to their finalScore values
     if (targetMessage?.sources) {
       targetMessage.sources.forEach(source => {
         chunkMap.set(source.id, source.finalScore);
       });
     }
-    
     return chunkMap;
   }, [messages, selectedMessageIndex]);
 
@@ -137,12 +132,11 @@ export default function Home() {
         content: data.answer,
         sources: data.sources,
         turn: data.turn,
-        confidence: data.confidence // <--- 2. Map confidence from API
+        confidence: data.confidence
       };
 
       setMessages(prev => {
         const newMessages = [...prev, assistantMessage];
-        // Auto-select the new message if it has sources
         if (data.sources && data.sources.length > 0) {
           setSelectedMessageIndex(newMessages.length - 1);
         }
@@ -167,7 +161,6 @@ export default function Home() {
       
       <div className="min-h-screen bg-slate-800">
         <div className="container mx-auto px-4 pt-4 pb-8">
-          {/* Header */}
           <header className="mb-8 text-center">
             <h1 className="text-4xl font-bold text-white mb-2">
               Beyond RAG
@@ -199,7 +192,6 @@ export default function Home() {
             </div>
           </header>
 
-        {/* Book Heatmap */}
         {chunksMetadata.length > 0 && totalLines > 0 && (
           <div className="mb-6">
             <BookHeatmap
@@ -210,11 +202,8 @@ export default function Home() {
           </div>
         )}
 
-        {/* Two Column Layout */}
         <div className="flex gap-4 h-[600px]">
-          {/* Left Side - Chat */}
           <div className="flex-1 bg-slate-700 rounded-lg shadow-lg flex flex-col">
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {messages.length === 0 && (
                 <div className="text-center text-slate-400 mt-12">
@@ -247,7 +236,6 @@ export default function Home() {
                       }
                     }}
                   >
-                    {/* --- 3. CONFIDENCE BADGE UI --- */}
                     {msg.role === 'assistant' && msg.confidence !== undefined && (
                       <div className="group relative mb-3">
                         <div className={`
@@ -257,25 +245,22 @@ export default function Home() {
                             'bg-rose-500/20 text-rose-100 border border-rose-500/30'}
                         `}>
                           {msg.confidence >= 80 ? (
-                            <span className="text-[10px]">🛡️ Verified</span>
+                            <span className="text-[10px]">Verified</span>
                           ) : msg.confidence >= 50 ? (
                             <span className="text-[10px]">⚠️ Uncertain</span>
                           ) : (
-                            <span className="text-[10px]">❌ Low Confidence</span>
+                            <span className="text-[10px]">Low Confidence</span>
                           )}
                           
                           <span className="opacity-75 border-l border-white/10 pl-1.5 ml-0.5">
                             {msg.confidence}%
                           </span>
                         </div>
-                        
-                        {/* Tooltip - positioned relative to message bubble to avoid overflow clipping */}
                         <div className="invisible group-hover:visible absolute bottom-full left-0 mb-2 w-64 p-3 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 z-[100] pointer-events-none">
                           <div className="font-semibold mb-1">Confidence Score (0-100)</div>
                           <div className="text-slate-300 leading-relaxed">
                             Indicates how well the answer stays aligned with the source material, indicating the risk of hallucination. Calculated from groundedness (50%), keyword overlap (30%), and context quality (20%).
                           </div>
-                          {/* Tooltip arrow */}
                           <div className="absolute top-full left-4 -mt-1 w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45"></div>
                         </div>
                       </div>
@@ -285,7 +270,7 @@ export default function Home() {
                     
                     {msg.sources && msg.sources.length > 0 && (
                       <div className="text-xs mt-2 opacity-70 text-white">
-                        📚 {msg.sources.length} source{msg.sources.length !== 1 ? 's' : ''} • Click to view
+                        {msg.sources.length} source{msg.sources.length !== 1 ? 's' : ''} • Click to view
                       </div>
                     )}
 
@@ -302,15 +287,37 @@ export default function Home() {
                 <div className="flex justify-start">
                   <div className="bg-slate-600 rounded-lg p-4">
                     <div className="flex items-center gap-2">
-                      <div className="animate-pulse">🤔</div>
-                      <span className="text-white">Thinking...</span>
+                      {/* Animated Thinking Dots */}
+                      <div className="flex items-end gap-1 h-6" aria-label="Thinking...">
+                        <span className="dot-animate block w-2 h-2 bg-white rounded-full animate-bounce-dot-1" />
+                        <span className="dot-animate block w-2 h-2 bg-white rounded-full animate-bounce-dot-2" />
+                        <span className="dot-animate block w-2 h-2 bg-white rounded-full animate-bounce-dot-3" />
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
+              <style jsx global>{`
+                .animate-bounce-dot-1 {
+                  animation: bounce-dot 1.2s infinite;
+                  animation-delay: 0s;
+                }
+                .animate-bounce-dot-2 {
+                  animation: bounce-dot 1.2s infinite;
+                  animation-delay: 0.2s;
+                }
+                .animate-bounce-dot-3 {
+                  animation: bounce-dot 1.2s infinite;
+                  animation-delay: 0.4s;
+                }
+                @keyframes bounce-dot {
+                  0%, 80%, 100% { transform: translateY(0); }
+                  30% { transform: translateY(-8px);}
+                  50% { transform: translateY(0);}
+                }
+              `}</style>
             </div>
 
-            {/* Input Form */}
             <form 
               onSubmit={handleSubmit} 
               className="border-t border-slate-600 p-4"
@@ -347,11 +354,10 @@ export default function Home() {
             </form>
           </div>
 
-          {/* Right Side - Chunks/Sources */}
           <div className="flex-1 bg-slate-700 rounded-lg shadow-lg flex flex-col">
             <div className="border-b border-slate-600 p-4">
               <h2 className="text-xl font-bold text-white">
-                📚 Source Chunks
+                Source Chunks
               </h2>
               {selectedSources && (
                 <p className="text-sm text-slate-300 mt-1">
@@ -397,13 +403,11 @@ export default function Home() {
                             <span className="cursor-help">
                               <span className="font-semibold">Decay Score:</span> {source.recencyScore.toFixed(3)}
                             </span>
-                            {/* Tooltip - positioned relative to avoid overflow clipping */}
                             <div className="invisible group-hover:visible absolute bottom-full left-0 mb-2 w-56 p-2.5 bg-slate-900 text-white text-xs rounded-lg shadow-xl border border-slate-700 z-[100] pointer-events-none">
                               <div className="font-semibold mb-1">Decay Score (0.0-1.0)</div>
                               <div className="text-slate-300 leading-relaxed">
                                 How fresh a memory is. Recently accessed memories score higher (closer to 1.0), while older ones fade but never disappear, like human memory.
                               </div>
-                              {/* Tooltip arrow */}
                               <div className="absolute top-full left-4 -mt-1 w-2 h-2 bg-slate-900 border-r border-b border-slate-700 rotate-45"></div>
                             </div>
                           </span>

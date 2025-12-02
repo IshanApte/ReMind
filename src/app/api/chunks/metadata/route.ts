@@ -1,11 +1,11 @@
+// This API route acts as a proxy to forward GET requests for chunks metadata to the backend's /api/chunks/metadata endpoint
+// and returns the backend's response to the client.
 import { NextRequest, NextResponse } from 'next/server';
 
-// Backend server URL (runs on separate port)
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 
 export async function GET(request: NextRequest) {
   try {
-    // Proxy request to backend server
     const response = await fetch(`${BACKEND_URL}/api/chunks/metadata`, {
       method: 'GET',
       headers: {
@@ -25,8 +25,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error: any) {
     console.error('API Error:', error);
-    
-    // Check if backend is not running
+
+    // Backend not reached error msg
     const errorCode = error.code || error.cause?.code || error.cause?.errors?.[0]?.code;
     if (errorCode === 'ECONNREFUSED') {
       return NextResponse.json(
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
         { status: 503 }
       );
     }
-    
+
     return NextResponse.json(
       {
         error: 'Failed to load chunks metadata',
@@ -47,4 +47,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

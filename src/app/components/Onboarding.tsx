@@ -1,6 +1,15 @@
+/**
+ * Onboarding Modal
+ * ----------------
+ * This React component displays a multi-step onboarding modal to educate users
+ * about the app's key features (beyond RAG, heatmap visualization, etc.).
+ * Steps provide descriptions, developer credits, and sample usage prompts.
+ * Includes animated transitions, step navigation, progress, and visual illustrations.
+ */
+
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import HeatMapImage from './HeatMap.png';
 import ChunksImage from './Chunks.png';
 import ConfidenceScoreImage from './ConfidenceScore.png';
@@ -17,13 +26,13 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
   const [displayStep, setDisplayStep] = useState(0);
   const [isExiting, setIsExiting] = useState(false);
 
-  // Portfolio URLs - Update these with your actual portfolio links
+  // Portfolio URLs for developer credits
   const developerPortfolios = {
-    ishan: 'https://ishan.info/', // Update with Ishan's portfolio URL
-    prathamesh: 'https://www.prathamesh-more.com/' // Update with Prathamesh's portfolio URL
+    ishan: 'https://ishan.info/',
+    prathamesh: 'https://www.prathamesh-more.com/'
   };
 
-
+  // Onboarding steps content
   const steps = [
     {
       title: "Beyond RAG",
@@ -57,16 +66,15 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     }
   ];
 
+  // Go to next onboarding step or complete
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
       setDirection('forward');
       setIsTransitioning(true);
-      // Fade out current content
       setTimeout(() => {
         const nextStep = currentStep + 1;
         setCurrentStep(nextStep);
         setDisplayStep(nextStep);
-        // Fade in new content
         setTimeout(() => {
           setIsTransitioning(false);
         }, 50);
@@ -76,16 +84,15 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     }
   };
 
+  // Go to previous onboarding step
   const handlePrevious = () => {
     if (currentStep > 0) {
       setDirection('backward');
       setIsTransitioning(true);
-      // Fade out current content
       setTimeout(() => {
         const prevStep = currentStep - 1;
         setCurrentStep(prevStep);
         setDisplayStep(prevStep);
-        // Fade in new content
         setTimeout(() => {
           setIsTransitioning(false);
         }, 50);
@@ -93,10 +100,9 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     }
   };
 
+  // Fade out and complete onboarding
   const handleComplete = () => {
-    // Start fade-out animation
     setIsExiting(true);
-    // After animation completes, hide and call onComplete
     setTimeout(() => {
       setIsVisible(false);
       onComplete();
@@ -145,7 +151,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         </div>
 
-        {/* Content */}
+        {/* Onboarding Content Area */}
         <div className="text-center mb-12 relative overflow-hidden min-h-[320px]">
           <div
             key={displayStep}
@@ -160,7 +166,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               transition: 'opacity 250ms ease-out, transform 250ms ease-out'
             }}
           >
-            {/* Removed: <div className="text-7xl mb-8">{step.icon}</div> */}
             <h2 className="text-5xl font-semibold text-gray-900 mb-3 tracking-tight">
               {step.title}
             </h2>
@@ -171,7 +176,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               {step.content}
             </p>
             
-            {/* Heatmap Image - Only on heatmap step */}
+            {/* Illustrations for certain steps */}
             {displayStep === 2 && (
               <div className="mt-8 flex justify-center">
                 <div className="relative w-full rounded-lg overflow-hidden shadow-lg" style={{ maxWidth: 'calc(42rem * 0.9)' }}>
@@ -184,8 +189,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 </div>
               </div>
             )}
-            
-            {/* Chunks Image - Only on chunks step (step 3) */}
             {displayStep === 3 && (
               <div className="mt-8 flex justify-center">
                 <div className="relative w-full rounded-lg overflow-hidden shadow-lg" style={{ maxWidth: 'calc(42rem * 0.9)' }}>
@@ -198,8 +201,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 </div>
               </div>
             )}
-            
-            {/* Confidence Score Image - Only on confidence score step (step 4) */}
             {displayStep === 4 && (
               <div className="mt-8 flex justify-center">
                 <div className="relative w-full rounded-lg overflow-hidden shadow-lg" style={{ maxWidth: 'calc(42rem * 0.9)' }}>
@@ -212,8 +213,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 </div>
               </div>
             )}
-            
-            {/* Developer Credits - Only on first step */}
+
+            {/* Developer credits, visible on first step */}
             {displayStep === 0 && (
               <div className="mt-10 pt-8">
                 <p className="text-sm text-gray-500 mb-2 font-medium">
@@ -243,9 +244,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         </div>
 
-        {/* Removed Visual Element */}
-
-        {/* Navigation */}
+        {/* Navigation buttons & mini stepper */}
         <div className="flex justify-between items-center">
           <button
             onClick={handlePrevious}
@@ -283,4 +282,3 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     </div>
   );
 }
-
