@@ -23,14 +23,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     prathamesh: 'https://www.prathamesh-more.com/' // Update with Prathamesh's portfolio URL
   };
 
-  // Check if user has seen onboarding before
-  useEffect(() => {
-    const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
-    if (hasSeenOnboarding === 'true') {
-      setIsVisible(false);
-      onComplete();
-    }
-  }, [onComplete]);
 
   const steps = [
     {
@@ -106,7 +98,6 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     setIsExiting(true);
     // After animation completes, hide and call onComplete
     setTimeout(() => {
-      localStorage.setItem('hasSeenOnboarding', 'true');
       setIsVisible(false);
       onComplete();
     }, 300);

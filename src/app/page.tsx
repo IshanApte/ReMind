@@ -46,14 +46,6 @@ export default function Home() {
     prathamesh: 'https://www.prathamesh-more.com/'
   };
   
-  // Check if user has seen onboarding before
-  useEffect(() => {
-    const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
-    if (hasSeenOnboarding === 'true') {
-      setShowOnboarding(false);
-    }
-  }, []);
-  
   // Load chunk metadata on mount
   useEffect(() => {
     const loadMetadata = async () => {
