@@ -1,8 +1,8 @@
 import { retrieve } from '../retrieval/retrieval';
 import { model } from './model';
 
-// Hugging Face Inference API endpoint for embeddings (using new router endpoint)
-const HUGGINGFACE_EMBEDDING_URL = 'https://router.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2';
+// Hugging Face Inference API endpoint for embeddings (explicitly using feature-extraction pipeline)
+const HUGGINGFACE_EMBEDDING_URL = 'https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2/pipeline/feature-extraction';
 
 // Function to get the embedding of a text using Hugging Face Inference API
 async function getEmbedding(text: string): Promise<number[]> {
