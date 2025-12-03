@@ -1,7 +1,11 @@
-// This API route acts as a proxy to forward incoming POST requests with a query to the backend's /api/query endpoint and returns the backend's response to the client.
+// This API route processes queries directly using the RAG system
 import { NextRequest, NextResponse } from 'next/server';
+import { askVestige } from '@/server/langchain/rag';
+import { reinforceMany } from '@/server/retrieval/retrieval';
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+// Track conversation turns (in-memory, resets on cold start)
+// For production, consider using Vercel KV for persistence
+let currentTurn = 1;
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,42 +19,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${BACKEND_URL}/api/query`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query }),
-    });
+    console.log(`\n📥 Query: "${query}" (Turn ${currentTurn})`);
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Backend server error' }));
-      return NextResponse.json(
-        { error: errorData.error || 'Failed to process query' },
-        { status: response.status }
+    // Call the RAG system directly
+    const result = await askVestige(query, currentTurn);
+
+    // Reinforce the memories that were used
+    if (result.sources && result.sources.length > 0) {
+      reinforceMany(
+        result.sources.map((s: any) => s.id),
+        currentTurn
       );
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    // Build response with truncated sources
+    const response = {
+      answer: result.answer,
+      confidence: result.confidence,
+      sources: result.sources.map((s: any) => ({
+        id: s.id,
+        text: s.text.substring(0, 200) + (s.text.length > 200 ? '...' : ''),
+        heading: s.heading,
+        chapter: s.chapter,
+        section: s.section,
+        similarity: s.similarity,
+        finalScore: s.finalScore,
+        recencyScore: s.recencyScore,
+        start_line: s.start_line,
+        end_line: s.end_line
+      })),
+      turn: currentTurn
+    };
+
+    // Increment turn counter
+    currentTurn += 1;
+
+    return NextResponse.json(response);
   } catch (error: any) {
-    console.error('API Error:', error);
-
-    const errorCode = error.code || error.cause?.code || error.cause?.errors?.[0]?.code;
-    if (errorCode === 'ECONNREFUSED') {
-      return NextResponse.json(
-        {
-          error: 'Backend server is not running',
-          message: 'Please start the backend server with: npm run dev:backend or npm run dev:all'
-        },
-        { status: 503 }
-      );
-    }
-
+    console.error('❌ API Error:', error);
     return NextResponse.json(
       {
         error: 'Failed to process query',
-        message: error.message || error.cause?.message || 'Unknown error'
+        message: error.message || 'Unknown error'
       },
       { status: 500 }
     );
