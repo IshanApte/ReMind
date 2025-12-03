@@ -98,16 +98,16 @@ app.get('/api/chunks/metadata', generalLimiter, (req: Request, res: Response) =>
   try {
     const metadata = loadChunksMetadata();
     
-    // Calculate total lines
-    const totalLines = metadata.length > 0 
+// Calculate total lines (handle null case)
+    const totalLines = metadata && metadata.length > 0 
       ? Math.max(...metadata.map((c: any) => c.end_line || 0))
       : 0;
-    
+        
     res.json({
-      chunks: metadata,
-      totalChunks: metadata.length,
+      chunks: metadata || [],
+      totalChunks: metadata?.length || 0,
       totalLines
-    });
+});
   } catch (error: any) {
     console.error('Error loading chunks metadata:', error);
     res.status(500).json({ error: 'Failed to load chunks metadata' });
