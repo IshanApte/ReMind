@@ -17,19 +17,16 @@ const nextConfig = {
           return callback();
         }
         
-        // Mark packages and their sub-imports as external
-        // For ES modules (like @xenova/transformers), return just the module name
-        // For CommonJS modules, use commonjs prefix
-        if (
-          request === '@xenova/transformers' ||
-          request.startsWith('@xenova/transformers/')
-        ) {
-          // ES Module - return as-is for dynamic imports
+        // Use regex to match all @xenova/transformers imports (including sub-paths)
+        if (/^@xenova\/transformers/.test(request)) {
+          // For ES modules with dynamic imports, return the module name as-is
+          // This allows Node.js to handle it as an ES module at runtime
           return callback(null, request);
         }
+        
+        // Mark other native dependencies as external
         if (
-          request === 'onnxruntime-node' ||
-          request.startsWith('onnxruntime-node/') ||
+          /^onnxruntime-node/.test(request) ||
           request === 'canvas' ||
           request === 'jsdom' ||
           /\.node$/.test(request) // Mark .node files as external
@@ -39,7 +36,7 @@ const nextConfig = {
         callback();
       };
       
-      // Combine with existing externals
+      // Combine with existing externals - put our function first to catch these modules
       const existingExternals = config.externals;
       if (Array.isArray(existingExternals)) {
         config.externals = [makeExternal, ...existingExternals];
@@ -48,6 +45,12 @@ const nextConfig = {
       } else {
         config.externals = [makeExternal, existingExternals].filter(Boolean);
       }
+      
+      // Prevent webpack from trying to resolve these modules
+      config.resolve = config.resolve || {};
+      config.resolve.alias = {
+        ...config.resolve.alias,
+      };
       
       // Ignore warnings about missing optional dependencies
       config.ignoreWarnings = [
