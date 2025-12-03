@@ -1,22 +1,69 @@
-import { pipeline } from '@xenova/transformers';
 import { retrieve, loadMemoryBank, reinforceMany } from './retrieval';
 
-// Global extractor to prevent reloading the model on every request
-let extractor: any = null;
+// Hugging Face Inference API endpoint for embeddings (using new router endpoint)
+const HUGGINGFACE_EMBEDDING_URL = 'https://router.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2';
 
 async function getEmbedding(text: string): Promise<number[]> {
-  // 1. Load the model if not already loaded
-  if (!extractor) {
-    console.log("🤖 Loading Embedding Model (Xenova/all-MiniLM-L6-v2)...");
-    extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+  const apiKey = process.env.HUGGINGFACE_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error('HUGGINGFACE_API_KEY is not set in environment variables');
   }
 
-  // 2. Generate Embedding
-  // 'mean_pooling': true ensures we get a single vector for the sentence, not one per word
-  const output = await extractor(text, { pooling: 'mean', normalize: true });
-  
-  // 3. Convert Tensor to plain Array
-  return Array.from(output.data);
+  try {
+    const response = await fetch(HUGGINGFACE_EMBEDDING_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ inputs: text }),
+    });
+
+    if (!response.ok) {
+      // Handle model loading (503) - retry after waiting
+      if (response.status === 503) {
+        const retryAfter = response.headers.get('Retry-After');
+        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
+        console.log(`⏳ Model is loading, waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        
+        // Retry once
+        const retryResponse = await fetch(HUGGINGFACE_EMBEDDING_URL, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ inputs: text }),
+        });
+        
+        if (!retryResponse.ok) {
+          const errorText = await retryResponse.text();
+          throw new Error(`Hugging Face API error: ${retryResponse.status} ${retryResponse.statusText} - ${errorText}`);
+        }
+        
+        const retryData = await retryResponse.json();
+        return Array.isArray(retryData) ? retryData : retryData[0];
+      }
+      
+      const errorText = await response.text();
+      throw new Error(`Hugging Face API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    // API returns array of floats directly (384 dimensions)
+    // Handle both single embedding and batch response formats
+    if (Array.isArray(data)) {
+      // If it's already an array, return it
+      return Array.isArray(data[0]) ? data[0] : data;
+    }
+    // If it's an object with embedding, extract it
+    return Array.isArray(data) ? data : data[0] || data;
+  } catch (error) {
+    console.error('Error getting embedding from Hugging Face:', error);
+    throw error;
+  }
 }
 
 async function runLiveTest() {

@@ -1,5 +1,5 @@
 // This API route proxies queries to the backend server
-// The backend server handles the RAG system with native Node.js modules (@xenova/transformers)
+// The backend server handles the RAG system using Hugging Face API for embeddings
 import { NextRequest, NextResponse } from 'next/server';
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
