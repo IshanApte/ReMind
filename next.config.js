@@ -11,7 +11,12 @@ const nextConfig = {
   webpack: (config, { isServer }) => {
     if (isServer) {
       // Create a function to handle externals for packages with native dependencies
-      const makeExternal = (request, callback) => {
+      const makeExternal = (context, request, callback) => {
+        // Ensure request is a string before checking
+        if (typeof request !== 'string') {
+          return callback();
+        }
+        
         // Mark packages and their sub-imports as external
         if (
           request === '@xenova/transformers' ||
