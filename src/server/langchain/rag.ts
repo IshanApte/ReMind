@@ -1,59 +1,40 @@
 import { retrieve } from '../retrieval/retrieval';
 import { model } from './model';
+import { pipeline } from '@xenova/transformers';
 
 // Global extractor to prevent reloading the model on every request
 let extractor: any = null;
-let transformersModule: any = null;
 
-// Dynamically import @xenova/transformers (ES Module)
-async function loadTransformers() {
-  if (!transformersModule) {
-    transformersModule = await import('@xenova/transformers');
-  }
-  return transformersModule;
-}
-
-// Function to get the embedding of a text
+// Function to get the embedding of a text using local @xenova/transformers
 async function getEmbedding(text: string): Promise<number[]> {
-  if (!extractor) {
-    const transformers = await loadTransformers();
-    extractor = await transformers.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-  }
-  const output = await extractor(text, { pooling: 'mean', normalize: true });
-  return Array.from(output.data);
-}
+  try {
+    // Load the model if not already loaded
+    if (!extractor) {
+      console.log("🤖 Loading Embedding Model (Xenova/all-MiniLM-L6-v2)...");
+      extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    }
 
-// Function to calculate cosine similarity between two vectors
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) return 0;
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
+    // Generate Embedding
+    // 'pooling': 'mean' ensures we get a single vector for the sentence, not one per word
+    const output = await extractor(text, { pooling: 'mean', normalize: true });
+    
+    // Convert Tensor to plain Array
+    return Array.from(output.data);
+  } catch (error) {
+    console.error('Error getting embedding:', error);
+    throw error;
   }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
 /**
  * Calculates confidence score (0-100) based on answer quality.
- * Combines groundedness, keyword overlap, and context quality.
+ * Combines keyword overlap and context quality (removed embedding-based groundedness).
  */
-async function calculateLocalConfidence(
+function calculateLocalConfidence(
   query: string, 
   answer: string, 
-  topChunkScore: number,
-  sourceContext: string
-): Promise<number> {
-  // Check how well the answer matches the source context
-  const answerEmbedding = await getEmbedding(answer);
-  const contextEmbedding = await getEmbedding(sourceContext);
-  const groundednessScore = cosineSimilarity(answerEmbedding, contextEmbedding);
-  // Normalize cosine similarity to [0, 1] range
-  const normalizedGroundedness = Math.max(0, (groundednessScore + 1) / 2);
-
+  topChunkScore: number
+): number {
   // Check if answer contains key terms from the query
   const stopWords = new Set(['the', 'is', 'at', 'which', 'on', 'a', 'an', 'and', 'or', 'but', 'how', 'what', 'why', 'who', 'does', 'do', 'can', 'explain', 'describe']);
   
@@ -75,8 +56,8 @@ async function calculateLocalConfidence(
   // Normalize context score from [0.3, 0.8] to [0, 1] range
   const normalizedContextScore = Math.min(Math.max((topChunkScore - 0.3) / 0.5, 0), 1);
 
-  // Weighted average: 50% groundedness, 30% keywords, 20% context quality
-  const confidence = (normalizedGroundedness * 0.5) + (keywordScore * 0.3) + (normalizedContextScore * 0.2);
+  // Weighted average: 50% keywords, 50% context quality
+  const confidence = (keywordScore * 0.5) + (normalizedContextScore * 0.5);
 
   return Math.round(confidence * 100);
 }
@@ -150,11 +131,10 @@ export const askVestige = async (userQuery: string, currentTurn: number) => {
 
     // 4. Calculate confidence score based on answer quality
     const topScore = memories.length > 0 ? memories[0].finalScore : 0;
-    const confidenceScore = await calculateLocalConfidence(
+    const confidenceScore = calculateLocalConfidence(
       userQuery, 
       answerText, 
-      topScore,
-      topContext // Pass source context for groundedness check
+      topScore
     );
 
     return {

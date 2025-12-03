@@ -1,11 +1,8 @@
-// This API route processes queries directly using the RAG system
+// This API route proxies queries to the backend server
+// The backend server handles the RAG system with native Node.js modules (@xenova/transformers)
 import { NextRequest, NextResponse } from 'next/server';
-import { askVestige } from '@/server/langchain/rag';
-import { reinforceMany } from '@/server/retrieval/retrieval';
 
-// Track conversation turns (in-memory, resets on cold start)
-// For production, consider using Vercel KV for persistence
-let currentTurn = 1;
+const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,44 +16,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log(`\n📥 Query: "${query}" (Turn ${currentTurn})`);
+    // Proxy the request to the backend server
+    const response = await fetch(`${BACKEND_URL}/api/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query }),
+    });
 
-    // Call the RAG system directly
-    const result = await askVestige(query, currentTurn);
-
-    // Reinforce the memories that were used
-    if (result.sources && result.sources.length > 0) {
-      reinforceMany(
-        result.sources.map((s: any) => s.id),
-        currentTurn
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Backend server error' }));
+      return NextResponse.json(
+        {
+          error: 'Failed to process query',
+          message: errorData.error || errorData.message || 'Backend server error'
+        },
+        { status: response.status }
       );
     }
 
-    // Build response with truncated sources
-    const response = {
-      answer: result.answer,
-      confidence: result.confidence,
-      sources: result.sources.map((s: any) => ({
-        id: s.id,
-        text: s.text.substring(0, 200) + (s.text.length > 200 ? '...' : ''),
-        heading: s.heading,
-        chapter: s.chapter,
-        section: s.section,
-        similarity: s.similarity,
-        finalScore: s.finalScore,
-        recencyScore: s.recencyScore,
-        start_line: s.start_line,
-        end_line: s.end_line
-      })),
-      turn: currentTurn
-    };
-
-    // Increment turn counter
-    currentTurn += 1;
-
-    return NextResponse.json(response);
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error: any) {
     console.error('❌ API Error:', error);
+    
+    // Check if backend server is reachable
+    if (error.code === 'ECONNREFUSED' || error.message?.includes('fetch failed')) {
+      return NextResponse.json(
+        {
+          error: 'Backend server is not running',
+          message: 'Please ensure the backend server is running on port 3001'
+        },
+        { status: 503 }
+      );
+    }
+    
     return NextResponse.json(
       {
         error: 'Failed to process query',
