@@ -18,9 +18,16 @@ const nextConfig = {
         }
         
         // Mark packages and their sub-imports as external
+        // For ES modules (like @xenova/transformers), return just the module name
+        // For CommonJS modules, use commonjs prefix
         if (
           request === '@xenova/transformers' ||
-          request.startsWith('@xenova/transformers/') ||
+          request.startsWith('@xenova/transformers/')
+        ) {
+          // ES Module - return as-is for dynamic imports
+          return callback(null, request);
+        }
+        if (
           request === 'onnxruntime-node' ||
           request.startsWith('onnxruntime-node/') ||
           request === 'canvas' ||

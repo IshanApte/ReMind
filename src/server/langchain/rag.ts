@@ -1,14 +1,23 @@
 import { retrieve } from '../retrieval/retrieval';
 import { model } from './model';
-import { pipeline } from '@xenova/transformers';
 
 // Global extractor to prevent reloading the model on every request
 let extractor: any = null;
+let transformersModule: any = null;
+
+// Dynamically import @xenova/transformers (ES Module)
+async function loadTransformers() {
+  if (!transformersModule) {
+    transformersModule = await import('@xenova/transformers');
+  }
+  return transformersModule;
+}
 
 // Function to get the embedding of a text
 async function getEmbedding(text: string): Promise<number[]> {
   if (!extractor) {
-    extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    const transformers = await loadTransformers();
+    extractor = await transformers.pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
   }
   const output = await extractor(text, { pooling: 'mean', normalize: true });
   return Array.from(output.data);
