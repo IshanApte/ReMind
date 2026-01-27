@@ -13,7 +13,26 @@ dotenv.config();
 const app = express();
 const PORT = process.env.BACKEND_PORT || 3001;
 
-// Rate limiting for portfolio demo
+// Daily rate limit - 120 requests per day
+const dailyLimiter = rateLimit({
+  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  max: 120, // 120 requests per day
+  message: {
+    error: '📊 Daily limit reached',
+    message: 'You have reached the daily limit of 120 requests. This helps manage API costs.',
+    tip: 'The limit will reset in 24 hours from your first request today.',
+    retryAfter: '24 hours'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Skip rate limiting for localhost during development
+  skip: (req) => {
+    const ip = req.ip || req.connection.remoteAddress || req.socket.remoteAddress;
+    return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  }
+});
+
+// Rate limiting for portfolio demo (per 5 minutes)
 const portfolioQueryLimiter = rateLimit({
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 15, // 3 queries per minute average
@@ -114,8 +133,8 @@ app.get('/api/chunks/metadata', generalLimiter, (req: Request, res: Response) =>
   }
 });
 
-// Query endpoint
-app.post('/api/query', portfolioQueryLimiter, async (req: Request, res: Response) => {
+// Query endpoint (with daily and per-5-minute rate limits)
+app.post('/api/query', dailyLimiter, portfolioQueryLimiter, async (req: Request, res: Response) => {
   try {
     const { query } = req.body;
 
@@ -126,8 +145,6 @@ app.post('/api/query', portfolioQueryLimiter, async (req: Request, res: Response
         portfolio: 'This demonstrates input validation in production APIs'
       });
     }
-
-    console.log(`\n📥 [Portfolio Demo] Query: "${query}" (Turn ${currentTurn})`);
 
     // Call the RAG system
     const result = await askVestige(query, currentTurn);
@@ -166,7 +183,6 @@ app.post('/api/query', portfolioQueryLimiter, async (req: Request, res: Response
     // Increment turn counter
     currentTurn += 1;
 
-    console.log(`✅ [Portfolio] Query processed successfully (Turn ${currentTurn - 1})`);
     res.json(response);
   } catch (error: any) {
     console.error('❌ Backend Error:', error);

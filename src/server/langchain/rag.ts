@@ -106,8 +106,6 @@ function calculateLocalConfidence(
 
 export const askVestige = async (userQuery: string, currentTurn: number) => {
   try {
-    console.log(`\n🤔 Thinking about: "${userQuery}"...`);
-
     // 1. Convert query to embedding vector
     const queryVector = await getEmbedding(userQuery);
 
@@ -136,8 +134,6 @@ export const askVestige = async (userQuery: string, currentTurn: number) => {
       : top5Chunks;
 
     const topContext = selectedChunks.map(m => m.text).join("\n---\n");
-    
-    console.log(`📚 Found ${memories.length} memories. Using ${selectedChunks.length} chunks (${highScoreChunks.length} above ${scoreThreshold} threshold, ${top5Chunks.length} in top 5).`);
 
     // 3. Generate answer using retrieved context
     const prompt = `
@@ -155,15 +151,15 @@ export const askVestige = async (userQuery: string, currentTurn: number) => {
     If the context is irrelevant to the question, admit you don't recall that information.
     `;
 
-    // Send to Gemini
-    // Handle model API errors
+    // Generate answer using LLM
     let result;
     try {
       result = await model.invoke(prompt);
-    } catch (llmError) {
-      console.error("⚠️ Gemini API Refused to Answer:", llmError);
+    } catch (llmError: any) {
+      console.error("⚠️ OpenAI API Error:", llmError?.message || llmError);
+      
       return { 
-        answer: "I retrieved the memory, but I'm having trouble verbalizing it right now. (Safety Block Triggered)", 
+        answer: "I retrieved the memory, but I'm having trouble verbalizing it right now. (API Error: " + (llmError?.message || "Unknown error") + ")", 
         sources: selectedChunks,
         confidence: 0 
       };
